@@ -2,5 +2,7 @@
 target
 gateway.pid
 mem_cpu.csv
-stats.txt
 .DS_Store
+k6_summary.json
+k6_summary.txt
+stats.json
