@@ -16,7 +16,24 @@ run-subgraphs:
 	cargo build --release && ./target/release/subgraphs
 
 run-loadtest:
-    k6 run k6.js
+	@if ! [ -f ./gateway.pid ]; then \
+		echo "Error: Gateway is not running"; \
+		exit 1; \
+	fi
+	@PID=`cat ./gateway.pid`; \
+	echo "Starting monitoring (PID $$PID)..."; \
+	./monitor.sh $$PID & \
+	MONITOR_PID=$$!; \
+	echo "Monitoring started with PID $$MONITOR_PID."; \
+	\
+	echo "Running k6 load test..."; \
+	k6 run k6.js; \
+	echo "k6 load test finished."; \
+	\
+	echo "Stopping monitoring (PID $$MONITOR_PID)..."; \
+	kill $$MONITOR_PID; \
+	echo "Monitoring stopped."; \
+	kill $$PID
 
 define RUN_GATEWAY
 run-$(1):

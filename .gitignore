@@ -1,2 +1,6 @@
 *.log
 target
+gateway.pid
+mem_cpu.csv
+stats.txt
+.DS_Store
