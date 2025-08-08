@@ -92,7 +92,7 @@ fn report(pwd: &str) {
         }
 
         let parts: Vec<&str> = line.split(',').collect();
-        if parts.len() == 3 {
+        if parts.len() >= 3 {
             let cpu = parts[1].parse::<f64>().unwrap_or(0.0);
             let mem = parts[2].parse::<i64>().unwrap_or(0);
             max_cpu = max_cpu.max(cpu);
