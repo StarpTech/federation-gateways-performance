@@ -1,0 +1,368 @@
+import type { GatewayName } from "@/lib/data";
+import { GatewayNameLabel } from "./common";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+} from "./ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "./ui/table";
+
+function ValueWithUnit(props: { value: string | number; unit: string }) {
+  return (
+    <span>
+      {props.value}
+      <span className="text-muted-foreground"> {props.unit}</span>
+    </span>
+  );
+}
+
+function TableHeaderCell(props: {
+  className: string;
+  children: React.ReactNode;
+  title: string;
+  href: string;
+}) {
+  return (
+    <TableHead className={props.className}>
+      <a
+        href={props.href}
+        className="underline underline-offset-2 hover:opacity-75"
+        title={props.title}
+      >
+        {props.children}
+      </a>
+    </TableHead>
+  );
+}
+
+export function StressTestIntro(props: {
+  auditScores: Record<GatewayName, string> | null;
+}) {
+  const { auditScores } = props;
+
+  return (
+    <Intro
+      auditScores={auditScores}
+      description={
+        <>
+          This benchmark measured speed, efficiency, and - most critically -
+          reliability under a high-concurrency stress test.
+          <br />
+          The summary data below highlights two distinct classes of behavior:
+          gateways that remain 100% reliable under pressure and those that begin
+          to shed load.
+        </>
+      }
+      loadGeneration={
+        <>
+          k6 ramps traffic according to predefined stress patterns to a{" "}
+          <strong>target of 500 VUs</strong> over <strong>60 seconds</strong> to
+          simulate heavy usage.
+        </>
+      }
+      data={{
+        hive: {
+          rps: 1710.74,
+          p95: 336.59,
+          p99_9: 442.41,
+          cpu: 170,
+          mem: 116,
+          reliability: 100,
+        },
+        cosmo: {
+          rps: 554.75,
+          p95: 924.82,
+          p99_9: 1345.76,
+          cpu: 263,
+          mem: 406,
+          reliability: 100,
+        },
+        grafbase: {
+          rps: 433.78,
+          p95: 738.85,
+          p99_9: 976.55,
+          cpu: 138.0,
+          mem: 208,
+          reliability: 94.58,
+        },
+        apollo: {
+          rps: 310.48,
+          p95: 1663.29,
+          p99_9: 2148.91,
+          cpu: 271.0,
+          mem: 713,
+          reliability: 99.91,
+        },
+      }}
+    />
+  );
+}
+
+export function ConstantTestIntro(props: {
+  auditScores: Record<GatewayName, string> | null;
+}) {
+  const { auditScores } = props;
+
+  return (
+    <Intro
+      auditScores={auditScores}
+      description={
+        <>
+          This benchmark holds traffic steady at{" "}
+          <strong>50 virtual users</strong> to measure{" "}
+          <strong>baseline efficiency</strong> - not the breaking point.
+          <br />
+          We track throughput, p95 latency, CPU, memory, and reliability with
+          warm caches and no saturation to reveal per-request overhead in
+          everyday traffic.
+        </>
+      }
+      loadGeneration={
+        <>
+          k6 sends traffic of <strong>50 VUs</strong> over{" "}
+          <strong>60 seconds</strong> to simulate constant and low load.
+        </>
+      }
+      data={{
+        hive: {
+          rps: 1826.91,
+          p95: 48.34,
+          p99_9: 78.56,
+          cpu: 166.0,
+          mem: 53,
+          reliability: 100.0,
+        },
+        cosmo: {
+          rps: 570.79,
+          p95: 128.25,
+          p99_9: 348.17,
+          cpu: 263,
+          mem: 119,
+          reliability: 100,
+        },
+        grafbase: {
+          rps: 451.24,
+          p95: 139.79,
+          p99_9: 400.35,
+          cpu: 136.0,
+          mem: 94,
+          reliability: 100,
+        },
+        apollo: {
+          rps: 317.45,
+          p95: 201.34,
+          p99_9: 495.61,
+          cpu: 273.0,
+          mem: 193,
+          reliability: 100,
+        },
+      }}
+    />
+  );
+}
+
+function Intro(props: {
+  auditScores: Record<GatewayName, string> | null;
+  loadGeneration: React.ReactNode;
+  description: React.ReactNode;
+  data: Record<
+    GatewayName,
+    {
+      rps: number;
+      p95: number;
+      p99_9: number;
+      cpu: number;
+      mem: number;
+      reliability: number;
+    }
+  >;
+}) {
+  const rows: Array<{
+    name: GatewayName;
+    rps: number;
+    p95: number;
+    p99_9: number;
+    cpu: number;
+    mem: number;
+    reliability: number;
+    audit: string;
+  }> = [];
+
+  for (const [key, data] of Object.entries(props.data)) {
+    const name = key as GatewayName;
+    rows.push({
+      name,
+      rps: data.rps,
+      p95: data.p95,
+      p99_9: data.p99_9,
+      cpu: data.cpu,
+      mem: data.mem,
+      reliability: data.reliability,
+      audit: props.auditScores?.[name] || "-",
+    });
+  }
+
+  rows.sort((a, b) => b.rps - a.rps);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardDescription>{props.description}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[150px]">Gateway</TableHead>
+              <TableHeaderCell
+                className="text-center"
+                href="#rps"
+                title="Go to RPS measurments"
+              >
+                RPS
+              </TableHeaderCell>
+              <TableHeaderCell
+                className="text-center"
+                href="#latency"
+                title="Go to latency measurments"
+              >
+                p95
+              </TableHeaderCell>
+              <TableHeaderCell
+                className="text-center"
+                href="#latency"
+                title="Go to latency measurments"
+              >
+                p99.9
+              </TableHeaderCell>
+              <TableHeaderCell
+                className="text-center"
+                href="#cpu"
+                title="Go to CPU measurments"
+              >
+                CPU (max)
+              </TableHeaderCell>
+              <TableHeaderCell
+                className="text-center"
+                href="#mem"
+                title="Go to Memory measurments"
+              >
+                MEM (max)
+              </TableHeaderCell>
+              <TableHeaderCell
+                className="text-center"
+                href="#cpu"
+                title="Go to Memory measurments"
+              >
+                RPS per core
+              </TableHeaderCell>
+              <TableHeaderCell
+                className="text-center"
+                href="#reliability"
+                title="Go to Reliability measurments"
+              >
+                Reliability
+              </TableHeaderCell>
+              <TableHead className="text-right">
+                <a
+                  href="https://the-guild.dev/graphql/hive/federation-gateway-audit"
+                  target="_blank"
+                  className="underline underline-offset-2 hover:opacity-75"
+                  title="Compatibility with Apollo Federation"
+                >
+                  Compatibility
+                </a>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row) => {
+              return (
+                <TableRow key={row.name}>
+                  <TableCell className="font-medium">
+                    <GatewayNameLabel name={row.name} />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <ValueWithUnit value={row.rps} unit="reqs/s" />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <ValueWithUnit value={row.p95} unit="ms" />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <ValueWithUnit value={row.p99_9} unit="ms" />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <ValueWithUnit value={row.cpu} unit="%" />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <ValueWithUnit value={row.mem} unit="MB" />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <ValueWithUnit
+                      value={(row.rps / (row.cpu / 100)).toFixed(2)}
+                      unit="reqs/s"
+                    />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <ValueWithUnit value={row.reliability} unit="%" />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <ValueWithUnit value={row.audit} unit="%" />
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </CardContent>
+      <CardFooter className="text-sm py-6 block space-y-2 text-muted-foreground">
+        <div className="text-lg font-semibold text-white">Environment</div>
+        <p>
+          Azure's <strong>Standard D4s v4</strong> VM - <strong>4 vCPUs</strong>
+          , <strong>16 GiB memory</strong>,{" "}
+          <strong>Linux (Ubuntu 24.04)</strong> - ensuring consistency and
+          reproducibility of results.
+        </p>
+        <p className="font-semibold mt-4">Phase 1 - Warm‑up</p>
+        <ul className="list-disc list-inside pl-2">
+          <li>
+            Generate a preliminary load with <strong>k6</strong> for{" "}
+            <strong>15 seconds</strong>.
+          </li>
+          <li>
+            Allows the gateway to begin handling GraphQL requests, perform
+            initial setup (e.g., <i>cache warming</i>), and stabilize under a
+            moderate load.
+          </li>
+        </ul>
+        <p className="font-semibold mt-4">Phase 2 - Measurement</p>
+        <ul className="list-disc list-inside pl-2">
+          <li>
+            <strong>Load generation:</strong> {props.loadGeneration}
+          </li>
+          <li>
+            <strong>Performance monitoring:</strong> a dedicated monitoring
+            script samples key performance metrics every{" "}
+            <strong>0.2 seconds</strong>.
+          </li>
+          <li>
+            <strong>CPU limiting / isolation:</strong> the gateway is restricted
+            to a designated set of CPU cores (<strong>3 cores</strong>),
+            effectively isolating its processing. The load generator (
+            <strong>k6</strong>) is restricted to <strong>1 CPU core</strong> to
+            minimize interference between components.
+          </li>
+        </ul>
+      </CardFooter>
+    </Card>
+  );
+}

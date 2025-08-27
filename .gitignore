@@ -1,7 +1,7 @@
 *.log
 target
 gateway.pid
-mem_cpu.csv
+data.csv
 .DS_Store
 k6_summary.json
 k6_summary.txt

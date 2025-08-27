@@ -1,22 +1,25 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Samples CPU, RSS, and PSS for an entire process group.
-# Usage: ./memory.sh -g <pgid> [-o mem_cpu.csv] [-i 1]
+# Samples CPU, RSS, PSS, and k6 metrics for an entire process group.
+# Usage: ./memory.sh -g <pgid> [-o data.csv] [-i 1] [-k k6_api_addr]
 #   -g PGID        Process group id to monitor (required)
-#   -o OUTPUT      CSV file (default: mem_cpu.csv)
+#   -o OUTPUT      CSV file (default: data.csv)
 #   -i INTERVAL    Seconds between samples (default: 1)
+#   -k K6_API      k6 REST API address (e.g., 127.0.0.1:6565)
 
 PGID=""
-OUTPUT_FILE="mem_cpu.csv"
+OUTPUT_FILE="data.csv"
 INTERVAL="1"
+K6_API=""
 
-while getopts ":g:o:i:" opt; do
+while getopts ":g:o:i:k:" opt; do
   case "$opt" in
     g) PGID="$OPTARG" ;;
     o) OUTPUT_FILE="$OPTARG" ;;
     i) INTERVAL="$OPTARG" ;;
-    *) echo "Usage: $0 -g <pgid> [-o output.csv] [-i interval]"; exit 1 ;;
+    k) K6_API="$OPTARG" ;;
+    *) echo "Usage: $0 -g <pgid> [-o output.csv] [-i interval] [-k k6_api]"; exit 1 ;;
   esac
 done
 
@@ -25,38 +28,73 @@ if [[ -z "$PGID" ]]; then
   exit 1
 fi
 
-echo "Timestamp,Total_CPU,Total_RSS_KB,Total_PSS_KB" > "$OUTPUT_FILE"
+echo "Seconds,VUs,RPS,P95_ms,Req_success_rate,Total_CPU,Total_RSS_KB" > "$OUTPUT_FILE"
 echo "Monitoring PGID $PGID. Writing to $OUTPUT_FILE. Ctrl+C to stop."
 
 # Helper: list all PIDs in the process group
 pids_in_group() {
-  # pgrep -g lists processes in the group; may include the leader
-  pgrep -g "$PGID" || true
+  # pgrep -g lists processes in the group; tr converts newlines to spaces.
+  pgrep -g "$PGID" | tr '\n' ' ' || true
 }
+
+# Queries the k6 API for key performance metrics.
+get_k6_metrics() {
+    # If the API isn't specified, return zero values.
+    if [[ -z "$K6_API" ]]; then
+        printf "0,0.00,0.00,0.00\n" # VUs, RPS, P95, Success rate
+        return
+    fi
+
+    # Get all metrics in one go. Handle errors gracefully.
+    local metrics_json
+    metrics_json=$(curl -fsS "http://$K6_API/v1/metrics" 2>/dev/null || echo "{}")
+
+    # Use a single, more efficient jq command to parse all metrics.
+    # It converts the metrics array into an object for easy key-based access.
+    local result
+    result=$(echo "$metrics_json" | jq -r '
+        # If .data is null, default to an empty array [] to prevent iteration errors.
+        ((.data // []) | map({key: .id, value: .}) | from_entries) as $metrics |
+        # Safely extract each value, providing a default of 0.
+        ($metrics.vus.attributes.sample.value // 0) as $vus |
+        ($metrics.http_reqs.attributes.sample.rate // 0) as $rps |
+        ($metrics.http_req_duration.attributes.sample."p(95)" // 0) as $p95 |
+        ($metrics.success_rate.attributes.sample.rate // 1) as $req_success_rate |
+        # Output the results as a comma-separated string.
+        "\($vus),\($rps),\($p95),\($req_success_rate)"
+    ' || printf "0,0.00,0.00,0.00\n")
+
+    # If jq fails (e.g., empty JSON), default the result.
+    if [[ -z "$result" ]]; then
+        printf "0,0.00,0.00,0.00\n"
+        return
+    fi
+    echo "$result"
+}
+
 
 sum_cpu_rss() {
   local pids="$1"
-  # ps: sum %CPU and RSS across PIDs
-  ps -o %cpu=,rss= -p "$(echo "$pids" | tr ' ' ',')" 2>/dev/null | awk '
-    { cpu+=$1; rss+=$2 } END { printf("%.2f,%d\n", cpu, rss) }
-  '
+  # If no PIDs, return zero values.
+  if [[ -z "$pids" ]]; then
+    printf "0.00,0\n"
+    return
+  fi
+  # Build arguments for ps. This is more portable across macOS and Linux.
+  # It handles multiple PIDs by creating multiple -p arguments.
+  local ps_args=()
+  for pid in $pids; do
+    ps_args+=(-p "$pid")
+  done
+  # On macOS, `ps -o %cpu,rss` includes a header, which awk can skip with NR>1.
+  # The '=' to suppress headers is a Linux-specific feature.
+  # The || clause provides a fallback if ps or awk fails.
+  ps "${ps_args[@]}" -o %cpu,rss 2>/dev/null | awk '
+    NR > 1 { cpu+=$1; rss+=$2 } END { printf("%.2f,%d\n", cpu, rss) }
+  ' || printf "0.00,0\n"
 }
 
-sum_pss_kb() {
-  local total=0
-  local pid
-  while read -r pid; do
-    [[ -z "$pid" ]] && continue
-    # smaps_rollup provides aggregated Pss for the process in KB
-    if [[ -r "/proc/$pid/smaps_rollup" ]]; then
-      # shellcheck disable=SC2002
-      val=$(awk '/^Pss:/{s+=$2} END{print s+0}' "/proc/$pid/smaps_rollup" 2>/dev/null || echo 0)
-      total=$(( total + ${val:-0} ))
-    fi
-  done <<< "$1"
-  echo "$total"
-}
-
+START_TIME=$(date +%s)
 while true; do
   PIDS="$(pids_in_group)"
   if [[ -z "$PIDS" ]]; then
@@ -64,16 +102,22 @@ while true; do
     break
   fi
 
+  # k6 Metrics
+  k6_metrics="$(get_k6_metrics)"
+  # Use IFS and read to safely parse the comma-separated values.
+  IFS=',' read -r VUS RPS P95_MS REQ_SUCCESS_RATE <<< "$k6_metrics"
+
   # CPU & RSS
-  CPU_RSS="$(sum_cpu_rss "$PIDS" || echo "0,0")"
+  CPU_RSS="$(sum_cpu_rss "$PIDS")"
   CPU="$(echo "$CPU_RSS" | cut -d, -f1)"
   RSS_KB="$(echo "$CPU_RSS" | cut -d, -f2)"
 
-  # PSS
-  PSS_KB="$(sum_pss_kb "$PIDS")"
-
-  TS="$(date +"%Y-%m-%d %H:%M:%S")"
-  echo "$TS,$CPU,$RSS_KB,$PSS_KB" >> "$OUTPUT_FILE"
+  # recording only if the VUS is greater than 0
+  if [[ $VUS -gt 0 ]]; then
+      NOW=$(date +%s)
+      ELAPSED=$((NOW - START_TIME))
+      echo "$ELAPSED,$VUS,$RPS,$P95_MS,$REQ_SUCCESS_RATE,$CPU,$RSS_KB" >> "$OUTPUT_FILE"
+  fi
 
   sleep "$INTERVAL"
 done

@@ -6,8 +6,9 @@ set -Eeuo pipefail
 #   GATEWAY_CPUSET="0-2"   # CPU cores for the gateway
 #   LOAD_CPUSET="3"        # CPU cores for k6
 #   WAIT_FOR_URL="http://127.0.0.1:4000/health"  # healthcheck URL
-#   WARMUP_SECONDS=30
+#   WARMUP_SECONDS=15
 #   MEASURE_SECONDS=60
+#   LOAD_MODE="constant"        # "constant" or "stress"
 
 command -v realpath >/dev/null || { echo "realpath required"; exit 1; }
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
@@ -22,22 +23,41 @@ get_logical_cores() {
   fi
 }
 
-if [[ $# -lt 1 ]]; then
-  echo "Usage: $0 <gateway_name>"
+if [[ $# -lt 2 ]]; then
+  echo "Usage: $0 <gateway_name> <mode>"
   exit 1
 fi
 
 GATEWAY_NAME="$1"
+LOAD_MODE="$2"
 GATEWAY_DIR="$SCRIPT_DIR/gateways/$GATEWAY_NAME"
 [[ -d "$GATEWAY_DIR" ]] || { echo "Error: Gateway '$GATEWAY_NAME' not found at '$GATEWAY_DIR'."; exit 1; }
 [[ -x "$GATEWAY_DIR/run.sh" ]] || { echo "Error: '$GATEWAY_DIR/run.sh' missing or not executable. It should 'exec' the binary."; exit 1; }
 
 # Defaults
-WARMUP_SECONDS="${WARMUP_SECONDS:-30}"
+WARMUP_SECONDS="${WARMUP_SECONDS:-15}"
 MEASURE_SECONDS="${MEASURE_SECONDS:-60}"
+K6_API_ADDR="127.0.0.1:6565"
 
 CORES="$(get_logical_cores)"
 echo "Host logical CPU cores: $CORES"
+
+# --- Automatic CPU Allocation ---
+# Default LOAD_CPUSET to the first core (0) if not provided by the user.
+LOAD_CPUSET="${LOAD_CPUSET:-0}"
+
+# Default GATEWAY_CPUSET to all other cores if not provided by the user.
+if [[ -z "${GATEWAY_CPUSET:-}" ]]; then
+  if (( CORES > 1 )); then
+    # If more than 1 core, use cores 1 to N-1 for the gateway.
+    GATEWAY_CPUSET="1-$((CORES - 1))"
+  else
+    # On a single-core machine, use core 0 for the gateway as well.
+    # This is not ideal for benchmarking but prevents the script from failing.
+    GATEWAY_CPUSET="0"
+  fi
+fi
+
 [[ -n "${GATEWAY_CPUSET:-}" ]] && echo "Gateway pinned to CPU set: $GATEWAY_CPUSET"
 [[ -n "${LOAD_CPUSET:-}"    ]] && echo "Load gen pinned to CPU set: $LOAD_CPUSET"
 
@@ -68,16 +88,16 @@ cd "$GATEWAY_DIR"
 
 echo "Starting gateway: $GATEWAY_NAME ..."
 # New session/process group; run.sh must 'exec' the real binary
-setsid taskset -c "${GATEWAY_CPUSET:-2}" ./run.sh >/dev/null 2>&1 &
+setsid taskset -c "${GATEWAY_CPUSET}" ./run.sh >/dev/null 2>&1 &
 GATEWAY_LEADER_PID=$!
-sleep 0.3
+sleep 2
 
 # Get the process group ID (equals leader PID when setsid worked)
 GATEWAY_PGID="$(ps -o pgid= -p "$GATEWAY_LEADER_PID" | tr -d ' ')"
 [[ -n "$GATEWAY_PGID" ]] || { echo "Error: failed to determine PGID."; exit 1; }
 
 # (Optional) pin gateway group to dedicated cores
-set_affinity_group "$GATEWAY_PGID" "${GATEWAY_CPUSET:-}"
+set_affinity_group "$GATEWAY_PGID" "${GATEWAY_CPUSET}"
 
 # Readiness check (optional)
 if [[ -n "${WAIT_FOR_URL:-}" ]]; then
@@ -109,21 +129,21 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+# Warmup
+echo "Warmup ($WARMUP_SECONDS s) ..."
+maybe_taskset "${LOAD_CPUSET}" k6 run -e SUMMARY_PATH="$(pwd)" \
+  -e MODE="constant" -e BENCH_GATEWAY_PID="$GATEWAY_LEADER_PID" -e BENCH_OVER_TIME="${WARMUP_SECONDS}s" "$SCRIPT_DIR/k6.js" >/dev/null
+
 # Start monitor for the whole PGID, pass cores so it writes metadata into CSV
 echo "Starting monitoring for PGID $GATEWAY_PGID ..."
-"$SCRIPT_DIR/monitor.sh" -g "$GATEWAY_PGID" -o mem_cpu.csv -i 1 >/dev/null 2>&1 &
+"$SCRIPT_DIR/monitor.sh" -g "$GATEWAY_PGID" -k "$K6_API_ADDR" -o data.csv -i "0.2" >/dev/null 2>&1 &
 MONITOR_PID=$!
 echo "Monitoring started (PID $MONITOR_PID)."
 
-# Warmup
-echo "Warmup ($WARMUP_SECONDS s) ..."
-maybe_taskset "${LOAD_CPUSET:-}" k6 run -e SUMMARY_PATH="$(pwd)" \
-  -e PHASE="warmup" -e DURATION="$WARMUP_SECONDS" "$SCRIPT_DIR/k6.js" >/dev/null
-
 # Measure
 echo "Load test ($MEASURE_SECONDS s) ..."
-maybe_taskset "${LOAD_CPUSET:-}" k6 run -e SUMMARY_PATH="$(pwd)" \
-  -e PHASE="measure" -e DURATION="$MEASURE_SECONDS" "$SCRIPT_DIR/k6.js"
+maybe_taskset "${LOAD_CPUSET}" k6 run --address "$K6_API_ADDR" -e SUMMARY_PATH="$(pwd)" \
+  -e MODE="$LOAD_MODE" -e BENCH_GATEWAY_PID="$GATEWAY_LEADER_PID" -e BENCH_OVER_TIME="${MEASURE_SECONDS}s" "$SCRIPT_DIR/k6.js"
 
 echo "Summary:"
 cargo run -p toolkit report "$(pwd)"

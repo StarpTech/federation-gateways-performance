@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-exec env -i RUST_LOG=info /home/azureuser/gateway-rs/target/x86_64-unknown-linux-musl/release/gateway ./supergraph.graphql
+export HIVE_SUPERGRAPH_SOURCE=file
+export HIVE_SUPERGRAPH_PATH=./supergraph.graphql
+exec env -i RUST_LOG=info /home/azureuser/gateway-rs/target/release/gateway
