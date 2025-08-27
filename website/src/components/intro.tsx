@@ -35,7 +35,7 @@ function TableHeaderCell(props: {
     <TableHead className={props.className}>
       <a
         href={props.href}
-        className="underline underline-offset-2 hover:opacity-75"
+        className="underline underline-offset-2 decoration-gray-500 hover:opacity-75"
         title={props.title}
       >
         {props.children}
@@ -71,6 +71,7 @@ export function StressTestIntro(props: {
       }
       data={{
         hive: {
+          version: "main",
           rps: 1710.74,
           p95: 336.59,
           p99_9: 442.41,
@@ -79,6 +80,7 @@ export function StressTestIntro(props: {
           reliability: 100,
         },
         cosmo: {
+          version: "v0.242.0",
           rps: 554.75,
           p95: 924.82,
           p99_9: 1345.76,
@@ -87,6 +89,7 @@ export function StressTestIntro(props: {
           reliability: 100,
         },
         grafbase: {
+          version: "v0.46.2",
           rps: 433.78,
           p95: 738.85,
           p99_9: 976.55,
@@ -95,6 +98,7 @@ export function StressTestIntro(props: {
           reliability: 94.58,
         },
         apollo: {
+          version: "v2.5.0",
           rps: 310.48,
           p95: 1663.29,
           p99_9: 2148.91,
@@ -134,6 +138,7 @@ export function ConstantTestIntro(props: {
       }
       data={{
         hive: {
+          version: "main",
           rps: 1826.91,
           p95: 48.34,
           p99_9: 78.56,
@@ -142,6 +147,7 @@ export function ConstantTestIntro(props: {
           reliability: 100.0,
         },
         cosmo: {
+          version: "v0.242.0",
           rps: 570.79,
           p95: 128.25,
           p99_9: 348.17,
@@ -150,6 +156,7 @@ export function ConstantTestIntro(props: {
           reliability: 100,
         },
         grafbase: {
+          version: "v0.46.2",
           rps: 451.24,
           p95: 139.79,
           p99_9: 400.35,
@@ -158,6 +165,7 @@ export function ConstantTestIntro(props: {
           reliability: 100,
         },
         apollo: {
+          version: "v2.5.0",
           rps: 317.45,
           p95: 201.34,
           p99_9: 495.61,
@@ -177,6 +185,7 @@ function Intro(props: {
   data: Record<
     GatewayName,
     {
+      version: string;
       rps: number;
       p95: number;
       p99_9: number;
@@ -188,6 +197,7 @@ function Intro(props: {
 }) {
   const rows: Array<{
     name: GatewayName;
+    version: string;
     rps: number;
     p95: number;
     p99_9: number;
@@ -201,6 +211,7 @@ function Intro(props: {
     const name = key as GatewayName;
     rows.push({
       name,
+      version: data.version,
       rps: data.rps,
       p95: data.p95,
       p99_9: data.p99_9,
@@ -276,7 +287,7 @@ function Intro(props: {
                 <a
                   href="https://the-guild.dev/graphql/hive/federation-gateway-audit"
                   target="_blank"
-                  className="underline underline-offset-2 hover:opacity-75"
+                  className="underline underline-offset-2 decoration-gray-500 hover:opacity-75"
                   title="Compatibility with Apollo Federation"
                 >
                   Compatibility
@@ -289,7 +300,10 @@ function Intro(props: {
               return (
                 <TableRow key={row.name}>
                   <TableCell className="font-medium">
-                    <GatewayNameLabel name={row.name} />
+                    <GatewayNameLabel name={row.name} /> <br />
+                    <span className="text-muted-foreground text-xs">
+                      {row.version}
+                    </span>
                   </TableCell>
                   <TableCell className="text-center">
                     <ValueWithUnit value={row.rps} unit="reqs/s" />
