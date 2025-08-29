@@ -39,6 +39,17 @@ WARMUP_SECONDS="${WARMUP_SECONDS:-15}"
 MEASURE_SECONDS="${MEASURE_SECONDS:-60}"
 K6_API_ADDR="127.0.0.1:6565"
 
+# Check for required commands
+HAS_SETSID=false
+if command -v setsid >/dev/null; then
+  HAS_SETSID=true
+fi
+
+HAS_TASKSET=false
+if command -v taskset >/dev/null; then
+  HAS_TASKSET=true
+fi
+
 CORES="$(get_logical_cores)"
 echo "Host logical CPU cores: $CORES"
 
@@ -58,12 +69,14 @@ if [[ -z "${GATEWAY_CPUSET:-}" ]]; then
   fi
 fi
 
-[[ -n "${GATEWAY_CPUSET:-}" ]] && echo "Gateway pinned to CPU set: $GATEWAY_CPUSET"
-[[ -n "${LOAD_CPUSET:-}"    ]] && echo "Load gen pinned to CPU set: $LOAD_CPUSET"
+if $HAS_TASKSET; then
+  [[ -n "${GATEWAY_CPUSET:-}" ]] && echo "Gateway pinned to CPU set: $GATEWAY_CPUSET"
+  [[ -n "${LOAD_CPUSET:-}"    ]] && echo "Load gen pinned to CPU set: $LOAD_CPUSET"
+fi
 
 maybe_taskset() {
   local cpus="$1"; shift
-  if [[ -n "${cpus:-}" ]] && command -v taskset >/dev/null; then
+  if $HAS_TASKSET && [[ -n "${cpus:-}" ]]; then
     taskset -c "$cpus" "$@"
   else
     [[ -n "${cpus:-}" ]] && echo "WARN: taskset not found; cannot pin to CPUs: $cpus" >&2
@@ -74,7 +87,7 @@ maybe_taskset() {
 set_affinity_group() {
   local pgid="$1" cpus="$2"
   [[ -z "${cpus:-}" ]] && return 0
-  command -v taskset >/dev/null || { echo "WARN: taskset not found; skipping gateway pinning" >&2; return 0; }
+  ! $HAS_TASKSET && { echo "WARN: taskset not found; skipping gateway pinning" >&2; return 0; }
   local pids
   pids="$(pgrep -g "$pgid" || true)"
   [[ -z "$pids" ]] && return 0
@@ -87,17 +100,39 @@ set_affinity_group() {
 cd "$GATEWAY_DIR"
 
 echo "Starting gateway: $GATEWAY_NAME ..."
-# New session/process group; run.sh must 'exec' the real binary
-setsid taskset -c "${GATEWAY_CPUSET}" ./run.sh >/dev/null 2>&1 &
+# Build the startup command, using setsid for process group management if available.
+start_cmd=("./run.sh")
+if $HAS_TASKSET && [[ -n "${GATEWAY_CPUSET:-}" ]]; then
+    start_cmd=("taskset" "-c" "${GATEWAY_CPUSET}" "${start_cmd[@]}")
+fi
+if $HAS_SETSID; then
+    start_cmd=("setsid" "${start_cmd[@]}")
+fi
+
+# Start the gateway in the background.
+"${start_cmd[@]}" >/dev/null 2>&1 &
 GATEWAY_LEADER_PID=$!
 sleep 2
 
-# Get the process group ID (equals leader PID when setsid worked)
-GATEWAY_PGID="$(ps -o pgid= -p "$GATEWAY_LEADER_PID" | tr -d ' ')"
-[[ -n "$GATEWAY_PGID" ]] || { echo "Error: failed to determine PGID."; exit 1; }
+# Get the process group ID (PGID) if setsid was used.
+GATEWAY_PGID=""
+if $HAS_SETSID; then
+    GATEWAY_PGID="$(ps -o pgid= -p "$GATEWAY_LEADER_PID" | tr -d ' ')"
+fi
+# Basic check to ensure the gateway process is still alive.
+if ! ps -p "$GATEWAY_LEADER_PID" >/dev/null; then
+  echo "Error: Gateway process died shortly after starting."
+  exit 1
+fi
+if $HAS_SETSID && [[ -z "$GATEWAY_PGID" ]]; then
+  echo "Error: failed to determine PGID even with setsid. Gateway might have crashed."
+  exit 1
+fi
 
 # (Optional) pin gateway group to dedicated cores
-set_affinity_group "$GATEWAY_PGID" "${GATEWAY_CPUSET}"
+if [[ -n "$GATEWAY_PGID" ]]; then
+    set_affinity_group "$GATEWAY_PGID" "${GATEWAY_CPUSET}"
+fi
 
 # Readiness check (optional)
 if [[ -n "${WAIT_FOR_URL:-}" ]]; then
@@ -110,21 +145,39 @@ if [[ -n "${WAIT_FOR_URL:-}" ]]; then
   done
 fi
 
-echo "Gateway PGID: $GATEWAY_PGID"
+if [[ -n "$GATEWAY_PGID" ]]; then
+  echo "Gateway PGID: $GATEWAY_PGID"
+else
+  echo "Gateway Leader PID: $GATEWAY_LEADER_PID"
+fi
 
-# Cleanup handler kills entire process group
+# Cleanup handler to stop all related processes.
 cleanup() {
   echo ""
   echo "Cleaning up ..."
-  if ps -o pgid= -p "$GATEWAY_LEADER_PID" >/dev/null 2>&1; then
+  if [[ -n "${MONITOR_PID:-}" ]] && ps -p "$MONITOR_PID" >/dev/null 2>&1; then
+    echo "Stopping monitor (PID $MONITOR_PID) ..."
+    kill "$MONITOR_PID" >/dev/null 2>&1 || true
+  fi
+
+  # Check if gateway process exists before trying to kill.
+  if ! ps -p "$GATEWAY_LEADER_PID" >/dev/null 2>&1; then
+    return # Gateway process is already gone.
+  fi
+
+  if [[ -n "$GATEWAY_PGID" ]]; then
     echo "Stopping gateway group (-$GATEWAY_PGID) ..."
     kill -TERM "-$GATEWAY_PGID" >/dev/null 2>&1 || true
     sleep 2
     kill -KILL "-$GATEWAY_PGID" >/dev/null 2>&1 || true
-  fi
-  if [[ -n "${MONITOR_PID:-}" ]] && ps -p "$MONITOR_PID" >/dev/null 2>&1; then
-    echo "Stopping monitor (PID $MONITOR_PID) ..."
-    kill "$MONITOR_PID" >/dev/null 2>&1 || true
+  else
+    # Without a PGID, we kill the process tree starting from the leader PID.
+    # This is a fallback for non-Linux systems.
+    echo "Stopping gateway process tree (PID $GATEWAY_LEADER_PID) ..."
+    pkill -P "$GATEWAY_LEADER_PID" >/dev/null 2>&1 || true # Kill children
+    kill -TERM "$GATEWAY_LEADER_PID" >/dev/null 2>&1 || true
+    sleep 2
+    kill -KILL "$GATEWAY_LEADER_PID" >/dev/null 2>&1 || true
   fi
 }
 trap cleanup EXIT INT TERM
@@ -134,9 +187,15 @@ echo "Warmup ($WARMUP_SECONDS s) ..."
 maybe_taskset "${LOAD_CPUSET}" k6 run -e SUMMARY_PATH="$(pwd)" \
   -e MODE="constant" -e BENCH_GATEWAY_PID="$GATEWAY_LEADER_PID" -e BENCH_OVER_TIME="${WARMUP_SECONDS}s" "$SCRIPT_DIR/k6.js" >/dev/null
 
-# Start monitor for the whole PGID, pass cores so it writes metadata into CSV
-echo "Starting monitoring for PGID $GATEWAY_PGID ..."
-"$SCRIPT_DIR/monitor.sh" -g "$GATEWAY_PGID" -k "$K6_API_ADDR" -o data.csv -i "0.2" >/dev/null 2>&1 &
+# Start monitor, passing PGID if available, otherwise leader PID.
+monitor_target_opts=()
+if [[ -n "$GATEWAY_PGID" ]]; then
+  monitor_target_opts=("-g" "$GATEWAY_PGID")
+else
+  monitor_target_opts=("-p" "$GATEWAY_LEADER_PID")
+fi
+echo "Starting monitoring for ${monitor_target_opts[0]} ${monitor_target_opts[1]} ..."
+"$SCRIPT_DIR/monitor.sh" "${monitor_target_opts[@]}" -k "$K6_API_ADDR" -o data.csv -i "0.2" >/dev/null 2>&1 &
 MONITOR_PID=$!
 echo "Monitoring started (PID $MONITOR_PID)."
 

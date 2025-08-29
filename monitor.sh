@@ -2,39 +2,57 @@
 set -Eeuo pipefail
 
 # Samples CPU, RSS, PSS, and k6 metrics for an entire process group.
-# Usage: ./memory.sh -g <pgid> [-o data.csv] [-i 1] [-k k6_api_addr]
-#   -g PGID        Process group id to monitor (required)
+# Usage: ./memory.sh [-g <pgid> | -p <pid>] [-o data.csv] [-i 1] [-k k6_api_addr]
+#   -g PGID        Process group id to monitor (required if -p not set)
+#   -p PID         Leader process id to monitor (required if -g not set)
 #   -o OUTPUT      CSV file (default: data.csv)
 #   -i INTERVAL    Seconds between samples (default: 1)
 #   -k K6_API      k6 REST API address (e.g., 127.0.0.1:6565)
 
 PGID=""
+LEADER_PID=""
 OUTPUT_FILE="data.csv"
 INTERVAL="1"
 K6_API=""
 
-while getopts ":g:o:i:k:" opt; do
+while getopts ":g:p:o:i:k:" opt; do
   case "$opt" in
     g) PGID="$OPTARG" ;;
+    p) LEADER_PID="$OPTARG" ;;
     o) OUTPUT_FILE="$OPTARG" ;;
     i) INTERVAL="$OPTARG" ;;
     k) K6_API="$OPTARG" ;;
-    *) echo "Usage: $0 -g <pgid> [-o output.csv] [-i interval] [-k k6_api]"; exit 1 ;;
+    *) echo "Usage: $0 [-g <pgid> | -p <pid>] [-o output.csv] [-i interval] [-k k6_api]"; exit 1 ;;
   esac
 done
 
-if [[ -z "$PGID" ]]; then
-  echo "Usage: $0 -g <pgid> [-o output.csv] [-i interval]"
+if [[ -z "$PGID" && -z "$LEADER_PID" ]]; then
+  echo "Error: Either -g <pgid> or -p <pid> is required."
+  echo "Usage: $0 [-g <pgid> | -p <pid>] [-o output.csv] [-i interval]"
   exit 1
 fi
 
+if [[ -n "$PGID" ]]; then
+    echo "Monitoring PGID $PGID. Writing to $OUTPUT_FILE. Ctrl+C to stop."
+else
+    echo "Monitoring PID tree $LEADER_PID. Writing to $OUTPUT_FILE. Ctrl+C to stop."
+fi
+
 echo "Seconds,VUs,RPS,P95_ms,Req_success_rate,Total_CPU,Total_RSS_KB" > "$OUTPUT_FILE"
-echo "Monitoring PGID $PGID. Writing to $OUTPUT_FILE. Ctrl+C to stop."
 
 # Helper: list all PIDs in the process group
-pids_in_group() {
-  # pgrep -g lists processes in the group; tr converts newlines to spaces.
-  pgrep -g "$PGID" | tr '\n' ' ' || true
+get_target_pids() {
+  local pids=""
+  if [[ -n "$PGID" ]]; then
+    # pgrep -g lists processes in the group.
+    pids=$(pgrep -g "$PGID" || true)
+  elif [[ -n "$LEADER_PID" ]]; then
+    # Find the main process and all its children.
+    pids=$(pgrep -P "$LEADER_PID" || true)
+    pids="$LEADER_PID $pids"
+  fi
+  # tr converts newlines to spaces for use in loops or other commands.
+  echo "$pids" | tr '\n' ' '
 }
 
 # Queries the k6 API for key performance metrics.
@@ -96,9 +114,13 @@ sum_cpu_rss() {
 
 START_TIME=$(date +%s)
 while true; do
-  PIDS="$(pids_in_group)"
+  PIDS="$(get_target_pids)"
   if [[ -z "$PIDS" ]]; then
-    echo "Process group $PGID is empty. Stopping monitoring."
+    if [[ -n "$PGID" ]]; then
+        echo "Process group $PGID is empty. Stopping monitoring."
+    else
+        echo "Process tree for $LEADER_PID is empty. Stopping monitoring."
+    fi
     break
   fi
 
