@@ -71,7 +71,7 @@ export function StressTestIntro(props: {
       }
       data={{
         hive: {
-          version: "main",
+          version: "v0.0.5",
           rps: 1726.32,
           p95: 331.56,
           p99_9: 443.62,
@@ -138,7 +138,7 @@ export function ConstantTestIntro(props: {
       }
       data={{
         hive: {
-          version: "main",
+          version: "v0.0.5",
           rps: 1831.09,
           p95: 48.58,
           p99_9: 78.84,
