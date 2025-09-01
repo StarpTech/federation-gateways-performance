@@ -1,5 +1,8 @@
 # GraphQL Federation Gateways Benchmark
 
+> 📊 **Live Results Available Here:**  
+> 👉 [the-guild.dev/graphql/hive/federation-gateway-performance](http://the-guild.dev/graphql/hive/federation-gateway-performance)  
+
 This project contains a suite of tools to benchmark and compare the performance of different GraphQL federation gateways.
 
 ## What This Benchmark Measures
@@ -124,6 +127,10 @@ The benchmark uses Unix-specific tools and commands that are not available on Wi
     | grafbase   | 451.24  | 400.35     | 139.79     | 27148   | 136.00      | 94           | 100.00           |
     | apollo     | 317.45  | 495.61     | 201.34     | 19098   | 273.00      | 193          | 100.00           |
     ```
+
+     ---
+    🌐 **Want the full, up-to-date benchmark results (with all gateways compared)?**  
+    Check them out here: [the-guild.dev/graphql/hive/federation-gateway-performance](http://the-guild.dev/graphql/hive/federation-gateway-performance)  
 
 ## Testing Modes
 
