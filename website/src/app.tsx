@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { CPUChart } from "./components/cpu-chart";
 import { LatencyChart } from "./components/latency-chart";
 import { MemChart } from "./components/mem-chart";
@@ -21,8 +21,6 @@ import {
 } from "@/components/ui/card";
 import { SuccessChart } from "./components/success-chart";
 import { type GatewayName, type TestName } from "@/lib/data";
-import { Label } from "./components/ui/label";
-import { RadioGroup, RadioGroupItem } from "./components/ui/radio-group";
 import {
   GithubRepoLogo,
   HiveLogoBgParts,
@@ -99,34 +97,73 @@ function MetricChart(props: {
 }
 
 function TestChoice(props: {
-  value: string;
   title: string;
+  value: string;
+  isActive: boolean;
   description: React.ReactNode;
+  onClick: () => void;
 }) {
   return (
-    <Label className="has-[[data-state=checked]]:border-ring has-[[data-state=checked]]:bg-input/20 flex items-start gap-3 rounded-lg border p-6 cursor-pointer">
-      <RadioGroupItem
-        value={props.value}
-        className="data-[state=checked]:border-primary hidden"
-      />
+    <a
+      href={"#/" + props.value}
+      onClick={(e) => {
+        e.preventDefault();
+        props.onClick();
+      }}
+      data-state={props.isActive ? "active" : "inactive"}
+      className={cn(
+        "text-sm leading-none font-medium flex items-start gap-3 rounded-lg border p-6 cursor-pointer",
+        props.isActive ? "border-ring bg-input/20" : "",
+      )}
+    >
       <div className="grid gap-1 font-normal">
         <div className="font-medium">{props.title}</div>
         <div className="text-muted-foreground text-xs leading-snug text-balance">
           {props.description}
         </div>
       </div>
-    </Label>
+    </a>
   );
 }
 
 export default function App() {
-  const [test, setTest] = useState<TestName>("stress");
   const [auditScores, setAuditScores] = useState<Record<
     GatewayName,
     string
   > | null>(null);
   const [isSticky, setSticky] = useState(false);
   const sectionRef = useRef<HTMLElement>(null);
+
+  const [test, setTest] = useState<TestName>(() => {
+    const hash = window.location.hash;
+    if (hash === "#/stress") {
+      return "stress";
+    }
+
+    if (hash === "#/constant") {
+      return "constant";
+    }
+
+    return "stress";
+  });
+
+  const handleTestChange = useCallback(
+    (value: TestName) => {
+      setTest(value);
+      window.location.hash = `#/${value}`;
+    },
+    [setTest],
+  );
+
+  useEffect(() => {
+    const onHashChange = () => {
+      const hash = window.location.hash;
+      setTest(hash === "#/constant" ? "constant" : "stress");
+    };
+
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
 
   useEffect(() => {
     fetchAuditScores().then(setAuditScores);
@@ -215,14 +252,12 @@ export default function App() {
         >
           <div className="container pb-6">
             <div className="pb-4">Choose a test scenario</div>
-            <RadioGroup
-              defaultValue={test}
-              onValueChange={(val) => setTest(val as TestName)}
-              className="grid gap-3 md:grid-cols-2"
-            >
+            <div className="grid gap-3 md:grid-cols-2">
               <TestChoice
                 value="stress"
                 title="Stress Test"
+                isActive={test === "stress"}
+                onClick={() => handleTestChange("stress")}
                 description={
                   <>
                     Simulates high traffic and measures performance under load.
@@ -234,6 +269,8 @@ export default function App() {
               <TestChoice
                 value="constant"
                 title="Low and Constant Traffic"
+                isActive={test === "constant"}
+                onClick={() => handleTestChange("constant")}
                 description={
                   <>
                     Simulates constant traffic with low load. <br />
@@ -242,7 +279,7 @@ export default function App() {
                   </>
                 }
               />
-            </RadioGroup>
+            </div>
           </div>
         </section>
         <section className="container-wrapper section-soft flex-1 pb-12">
