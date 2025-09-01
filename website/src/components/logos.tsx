@@ -58,7 +58,7 @@ export function TheGuildLogo() {
 export function GithubRepoLogo() {
   return (
     <a
-      href="https://github.com/the-guild-org/graphql-federation-gateway-audit"
+      href="https://github.com/graphql-hive/federation-gateways-performance"
       title="Go to the repository"
       className="hover:opacity-50"
     >
