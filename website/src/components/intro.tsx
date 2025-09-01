@@ -72,6 +72,7 @@ export function StressTestIntro(props: {
       data={{
         hive: {
           version: "v0.0.5",
+          website: "https://github.com/graphql-hive/router",
           rps: 1726.32,
           p95: 331.56,
           p99_9: 443.62,
@@ -81,6 +82,7 @@ export function StressTestIntro(props: {
         },
         cosmo: {
           version: "v0.247.0",
+          website: "https://github.com/wundergraph/cosmo",
           rps: 562.58,
           p95: 914.43,
           p99_9: 1256.28,
@@ -90,6 +92,7 @@ export function StressTestIntro(props: {
         },
         grafbase: {
           version: "v0.48.1",
+          website: "https://github.com/grafbase/grafbase",
           rps: 436.15,
           p95: 698.56,
           p99_9: 896.47,
@@ -99,6 +102,7 @@ export function StressTestIntro(props: {
         },
         apollo: {
           version: "v2.6.0",
+          website: "https://github.com/apollographql/router",
           rps: 312.52,
           p95: 1657.47,
           p99_9: 2405.74,
@@ -139,6 +143,7 @@ export function ConstantTestIntro(props: {
       data={{
         hive: {
           version: "v0.0.5",
+          website: "https://github.com/graphql-hive/router",
           rps: 1831.09,
           p95: 48.58,
           p99_9: 78.84,
@@ -148,6 +153,7 @@ export function ConstantTestIntro(props: {
         },
         cosmo: {
           version: "v0.247.0",
+          website: "https://github.com/wundergraph/cosmo",
           rps: 585.79,
           p95: 125.23,
           p99_9: 359.66,
@@ -157,6 +163,7 @@ export function ConstantTestIntro(props: {
         },
         grafbase: {
           version: "v0.48.1",
+          website: "https://github.com/grafbase/grafbase",
           rps: 461.19,
           p95: 137.81,
           p99_9: 395.73,
@@ -166,6 +173,7 @@ export function ConstantTestIntro(props: {
         },
         apollo: {
           version: "v2.6.0",
+          website: "https://github.com/apollographql/router",
           rps: 329.84,
           p95: 196.46,
           p99_9: 472.21,
@@ -186,6 +194,7 @@ function Intro(props: {
     GatewayName,
     {
       version: string;
+      website: string;
       rps: number;
       p95: number;
       p99_9: number;
@@ -198,6 +207,7 @@ function Intro(props: {
   const rows: Array<{
     name: GatewayName;
     version: string;
+    website: string;
     rps: number;
     p95: number;
     p99_9: number;
@@ -212,6 +222,7 @@ function Intro(props: {
     rows.push({
       name,
       version: data.version,
+      website: data.website,
       rps: data.rps,
       p95: data.p95,
       p99_9: data.p99_9,
@@ -300,7 +311,14 @@ function Intro(props: {
               return (
                 <TableRow key={row.name}>
                   <TableCell className="font-medium">
-                    <GatewayNameLabel name={row.name} /> <br />
+                    <a
+                      href={row.website}
+                      target="_blank"
+                      className="hover:underline"
+                    >
+                      <GatewayNameLabel name={row.name} />
+                    </a>{" "}
+                    <br />
                     <span className="text-muted-foreground text-xs">
                       {row.version}
                     </span>
