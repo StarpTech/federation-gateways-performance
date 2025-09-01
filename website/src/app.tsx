@@ -353,7 +353,7 @@ export default function App() {
                     <p>
                       <GatewayNameLabel name="cosmo" /> follows with a
                       steady-state throughput of
-                      <strong>~560 RPS</strong>.
+                      <strong>~580 RPS</strong>.
                     </p>
                     <p>
                       At this traffic level, the goal is stability rather than
@@ -363,8 +363,8 @@ export default function App() {
                     </p>
                     <p>
                       The other gateways settle at lower steady-state rates (
-                      <GatewayNameLabel name="grafbase" /> ~444 RPS,{" "}
-                      <GatewayNameLabel name="apollo" /> ~317 RPS), suggesting a
+                      <GatewayNameLabel name="grafbase" /> ~460 RPS,{" "}
+                      <GatewayNameLabel name="apollo" /> ~330 RPS), suggesting a
                       higher baseline cost per request on the same hardware.
                     </p>
                   </>
@@ -410,16 +410,15 @@ export default function App() {
                     </p>
 
                     <p>
-                      <GatewayNameLabel name="grafbase" /> also exhibits a very
-                      stable and low latency profile, though at a lower
-                      throughput.
+                      <GatewayNameLabel name="grafbase" /> and{" "}
+                      <GatewayNameLabel name="cosmo" /> exhibits a very stable
+                      and low latency profile, though at a lower throughput.
                     </p>
                     <p>
-                      In contrast, <GatewayNameLabel name="apollo" /> and{" "}
-                      <GatewayNameLabel name="cosmo" /> both show latency
-                      climbing steeply and linearly with the load, suggesting
-                      their architectures struggle to maintain responsiveness
-                      under the same high-concurrency stress.
+                      In contrast, <GatewayNameLabel name="apollo" /> show
+                      latency climbing steeply and linearly with the load,
+                      suggesting their architectures struggle to maintain
+                      responsiveness under the same high-concurrency stress.
                     </p>
                     <p>
                       For architects, a gateway that keeps latency low under
@@ -486,8 +485,8 @@ export default function App() {
                     <p>
                       <GatewayNameLabel name="hive" />
                       's and <GatewayNameLabel name="grafbase" /> are the
-                      standouts, peaking at just <strong>177%</strong> and{" "}
-                      <strong>139%</strong> CPU usage respectively.
+                      standouts, peaking at just <strong>170%</strong> and{" "}
+                      <strong>136%</strong> CPU usage respectively.
                       <br />
                       This showcases an extremely efficient processing model
                       that minimizes computational overhead.
@@ -513,7 +512,7 @@ export default function App() {
                     </p>
                     <p>
                       <GatewayNameLabel name="hive" /> holds a flat profile
-                      around ~182% CPU while delivering the{" "}
+                      around ~167% CPU while delivering the{" "}
                       <strong>
                         highest RPS, indicating strong performance per core and
                         minimal background overhead
@@ -522,13 +521,13 @@ export default function App() {
                     </p>
                     <p>
                       <GatewayNameLabel name="grafbase" /> runs with the lowest
-                      CPU footprint (~137%), but at a much lower throughput,
+                      CPU footprint (~133%), but at a much lower throughput,
                       signaling a frugal runtime that trades speed for cost.
                     </p>
                     <p>
                       <GatewayNameLabel name="cosmo" /> and{" "}
                       <GatewayNameLabel name="apollo" /> settle higher, around
-                      ~262–270% CPU at this load. The curves are stable, but the
+                      ~265–270% CPU at this load. The curves are stable, but the
                       elevated baseline points to a higher per-request cost on
                       the same hardware.
                     </p>
@@ -568,7 +567,7 @@ export default function App() {
                       gateway's underlying language and runtime.
                     </p>
                     <p>
-                      At just <strong>111 MB</strong> of peak memory usage,{" "}
+                      At just <strong>109 MB</strong> of peak memory usage,{" "}
                       <GatewayNameLabel name="hive" /> is decisively the most
                       memory-efficient gateway. <br />
                       Its remarkably low footprint, likely due to its Rust-based
@@ -577,8 +576,9 @@ export default function App() {
 
                     <p>
                       <GatewayNameLabel name="grafbase" /> is also very lean on
-                      memory at <strong>206 MB</strong>.{" "}
-                      <GatewayNameLabel name="cosmo" /> and{" "}
+                      memory at <strong>201 MB</strong>.{" "}
+                      <GatewayNameLabel name="cosmo" /> holds around{" "}
+                      <strong>380 MB</strong>.
                       <GatewayNameLabel name="apollo" /> exhibit a significantly
                       larger memory footprint.
                     </p>
@@ -587,7 +587,7 @@ export default function App() {
                   <>
                     <p>
                       <GatewayNameLabel name="hive" /> maintains the smallest
-                      steady-state footprint (<strong>~53 MB</strong>) with an
+                      steady-state footprint (<strong>~48 MB</strong>) with an
                       almost ruler-flat line, indicating tight allocation
                       control and no drift/leak behavior.
                     </p>
@@ -651,14 +651,14 @@ export default function App() {
                     <p>
                       <GatewayNameLabel name="apollo" /> maintained a 100%
                       success rate until around{" "}
-                      <strong>307 virtual users</strong>, at which point its
+                      <strong>360 virtual users</strong>, at which point its
                       success rate began to dip, indicating it was starting to
                       shed load.
                     </p>
                     <p>
                       <GatewayNameLabel name="grafbase" /> began experiencing
                       request failures much earlier, at around{" "}
-                      <strong>244 virtual users</strong>, and its success rate
+                      <strong>250 virtual users</strong>, and its success rate
                       continued to decline as the load increased.
                     </p>
                     <p>
