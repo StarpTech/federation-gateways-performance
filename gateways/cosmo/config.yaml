@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/wundergraph/cosmo/main/router/pkg/config/config.schema.json
+
+version: "1"
+
+traffic_shaping:
+  all:
+    max_conns_per_host: 1024
+    max_idle_conns_per_host: 512
+    max_idle_conns: 2048
