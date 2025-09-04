@@ -11,5 +11,5 @@ exec env -i LOG_LEVEL=fatal \
     PROMETHEUS_ENABLED=false \
     ENGINE_MAX_CONCURRENT_RESOLVERS=6144 \
     ROUTER_CONFIG_PATH=config.json \
-    GOGC=300 \
+    GOGC=250 \
     ./cosmo
